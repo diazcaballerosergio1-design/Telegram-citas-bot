@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Citas Amigos - Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; user-select: none; }
+        body { background-color: #f5f7fb; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; overflow: hidden; touch-action: pan-y; }
+        header { width: 100%; padding: 15px; text-align: center; font-weight: bold; font-size: 1.2rem; background: #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); color: #222; }
+        .card-container { flex: 1; width: 90%; max-width: 380px; margin: 20px 0; display: flex; justify-content: center; align-items: center; position: relative; }
+        
+        .card { 
+            width: 100%; 
+            height: 100%; 
+            background: #fff; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column; 
+            position: absolute; 
+            cursor: grab;
+            will-change: transform;
+            transition: transform 0.1s ease, opacity 0.1s ease;
+        }
+        .card:active { cursor: grabbing; }
+        .card img { width: 100%; height: 72%; object-fit: cover; background-color: #eee; pointer-events: none; }
+        .card-info { padding: 15px; height: 28%; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
+        .card-info h2 { font-size: 1.4rem; color: #111; margin-bottom: 4px; }
+        .card-info p { font-size: 0.95rem; color: #666; }
+        
+        /* Indicadores visuales LIKE / NOPE */
+        .badge {
+            position: absolute;
+            top: 25px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+            z-index: 10;
+        }
+        .badge-like {
+            left: 20px;
+            color: #2ed573;
+            border: 4px solid #2ed573;
+            transform: rotate(-15deg);
+        }
+        .badge-dislike {
+            right: 20px;
+            color: #ff4757;
+            border: 4px solid #ff4757;
+            transform: rotate(15deg);
+        }
+
+        .controls { width: 100%; max-width: 380px; padding-bottom: 25px; display: flex; justify-content: space-around; align-items: center; }
+        .btn { width: 65px; height: 65px; border-radius: 50%; border: none; font-size: 1.8rem; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.1s ease; }
+        .btn:active { transform: scale(0.9); }
+        .btn-dislike { background-color: #fff; color: #ff4757; border: 2px solid #ff4757; }
+        .btn-like { background-color: #ff4757; color: #fff; }
+        .no-candidates { text-align: center; color: #777; font-size: 1.1rem; padding: 20px; }
+        
+        /* Modal de Match */
+        .match-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; z-index: 1000; color: #fff; text-align: center; padding: 20px; }
+        .match-modal h1 { font-size: 2.5rem; color: #ff4757; margin-bottom: 10px; }
+        .match-modal p { font-size: 1.2rem; margin-bottom: 25px; }
+        .match-modal button { padding: 12px 30px; font-size: 1rem; border: none; background: #ff4757; color: white; border-radius: 25px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <header>✨ Descubrir Citas</header>
+
+    <div class="card-container" id="cardContainer">
+        <div style="text-align:center; color:#888;">Cargando candidato...</div>
+    </div>
+
+    <div class="controls" id="controls" style="display: none;">
+        <button class="btn btn-dislike" onclick="triggerSwipe('dislike')">✕</button>
+        <button class="btn btn-like" onclick="triggerSwipe('like')">❤️</button>
+    </div>
+
+    <div class="match-modal" id="matchModal">
+        <h1>🔥 ¡ES UN MATCH! 🔥</h1>
+        <p id="matchText">¡A esta persona también le gustas!</p>
+        <button onclick="closeMatchModal()">Seguir buscando</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let currentCandidate = null;
+        let userId = 12345;
+
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+        }
+
+        async function loadCandidate() {
+            const container = document.getElementById('cardContainer');
+            const controls = document.getElementById('controls');
+            
+            try {
+                const res = await fetch(`/api/candidate?user_id=${userId}`);
+                const data = await res.json();
+                
+                if (data.candidate) {
+                    currentCandidate = data.candidate;
+                    container.innerHTML = `
+                        <div class="card" id="activeCard">
+                            <div class="badge badge-like" id="badgeLike">LIKE</div>
+                            <div class="badge badge-dislike" id="badgeDislike">NOPE</div>
+                            <img src="${data.candidate.photo_url || 'https://via.placeholder.com/300x400'}" alt="Foto">
+                            <div class="card-info">
+                                <h2>${data.candidate.name}, ${data.candidate.age}</h2>
+                                <p>👤 ${data.candidate.gender}</p>
+                            </div>
+                        </div>
+                    `;
+                    controls.style.display = 'flex';
+                    initSwipeEvents();
+                } else {
+                    currentCandidate = null;
+                    container.innerHTML = `<div class="no-candidates">🎉 ¡Has visto a todas las personas disponibles por ahora!</div>`;
+                    controls.style.display = 'none';
+                }
+            } catch (err) {
+                container.innerHTML = `<div class="no-candidates">Error al cargar datos.</div>`;
+            }
+        }
+
+        // SWIPE LOGIC
+        let startX = 0, startY = 0, currentX = 0, currentY = 0;
+        let isDragging = false;
+
+        function initSwipeEvents() {
+            const card = document.getElementById('activeCard');
+            if (!card) return;
+
+            // Touch events
+            card.addEventListener('touchstart', handleStart);
+            card.addEventListener('touchmove', handleMove);
+            card.addEventListener('touchend', handleEnd);
+
+            // Mouse events
+            card.addEventListener('mousedown', handleStart);
+            window.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
+        }
+
+        function handleStart(e) {
+            isDragging = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            startX = clientX;
+            startY = clientY;
+            const card = document.getElementById('activeCard');
+            if (card) card.style.transition = 'none';
+        }
+
+        function handleMove(e) {
+            if (!isDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            currentX = clientX - startX;
+            currentY = clientY - startY;
+
+            const card = document.getElementById('activeCard');
+            const badgeLike = document.getElementById('badgeLike');
+            const badgeDislike = document.getElementById('badgeDislike');
+
+            if (!card) return;
+
+            const rotate = currentX * 0.08;
+            card.style.transform = `translate3d(${currentX}px, ${currentY}px, 0) rotate(${rotate}deg)`;
+
+            // Opacidad de indicadores
+            if (currentX > 30) {
+                badgeLike.style.opacity = Math.min(currentX / 100, 1);
+                badgeDislike.style.opacity = 0;
+            } else if (currentX < -30) {
+                badgeDislike.style.opacity = Math.min(Math.abs(currentX) / 100, 1);
+                badgeLike.style.opacity = 0;
+            } else {
+                badgeLike.style.opacity = 0;
+                badgeDislike.style.opacity = 0;
+            }
+        }
+
+        function handleEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            const threshold = 100;
+            if (currentX > threshold) {
+                completeSwipe('like');
+            } else if (currentX < -threshold) {
+                completeSwipe('dislike');
+            } else {
+                resetCard();
+            }
+            startX = 0; startY = 0; currentX = 0; currentY = 0;
+        }
+
+        function resetCard() {
+            const card = document.getElementById('activeCard');
+            const badgeLike = document.getElementById('badgeLike');
+            const badgeDislike = document.getElementById('badgeDislike');
+            if (!card) return;
+            card.style.transition = 'transform 0.3s ease';
+            card.style.transform = 'translate3d(0, 0, 0) rotate(0deg)';
+            if (badgeLike) badgeLike.style.opacity = 0;
+            if (badgeDislike) badgeDislike.style.opacity = 0;
+        }
+
+        function triggerSwipe(action) {
+            completeSwipe(action);
+        }
+
+        function completeSwipe(action) {
+            const card = document.getElementById('activeCard');
+            if (!card) return;
+
+            card.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+            const flyX = action === 'like' ? 500 : -500;
+            card.style.transform = `translate3d(${flyX}px, ${currentY}px, 0) rotate(${flyX * 0.05}deg)`;
+            card.style.opacity = '0';
+
+            setTimeout(() => {
+                sendAction(action);
+            }, 300);
+        }
+
+        async function sendAction(action) {
+            if (!currentCandidate) return;
+
+            const targetId = currentCandidate.id;
+            try {
+                const res = await fetch('/api/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        from_user: userId,
+                        target_id: targetId,
+                        action: action
+                    })
+                });
+
+                const data = await res.json();
+                if (data.match) {
+                    showMatchModal(currentCandidate.name);
+                } else {
+                    loadCandidate();
+                }
+            } catch (e) {
+                console.error(e);
+                loadCandidate();
+            }
+        }
+
+        function showMatchModal(name) {
+            document.getElementById('matchText').innerText = `¡A ${name} también le gustas! Les hemos enviado un mensaje por Telegram.`;
+            document.getElementById('matchModal').style.display = 'flex';
+        }
+
+        function closeMatchModal() {
+            document.getElementById('matchModal').style.display = 'none';
+            loadCandidate();
+        }
+
+        loadCandidate();
+    </script>
+</body>
+</html>
