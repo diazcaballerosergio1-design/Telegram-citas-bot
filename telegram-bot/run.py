@@ -21,7 +21,7 @@ web_app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 def send_telegram_notification(chat_id, text):
-    """Envía un mensaje de Telegram mediante la API HTTP limpia sin chocar con asyncio."""
+    """Envía notificaciones inmediatas por Telegram mediante solicitudes HTTP limpias."""
     if not BOT_TOKEN:
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -29,19 +29,25 @@ def send_telegram_notification(chat_id, text):
     try:
         requests.post(url, json=payload, timeout=5)
     except Exception as e:
-        print(f"Error al enviar notificación: {e}")
+        print(f"Error enviando notificación: {e}")
 
 def calcular_distancia(lat1, lon1, lat2, lon2):
+    """Calcula la distancia exacta en kilómetros entre dos coordenadas GPS (Haversine)."""
     if None in (lat1, lon1, lat2, lon2):
         return None
-    R = 6371
+    try:
+        lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
+    except (ValueError, TypeError):
+        return None
+
+    R = 6371  # Radio de la Tierra en km
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return round(R * c, 1)
 
-# --- PLANTILLA HTML DE LA MINI APP CON CHAT Y NAVEGACIÓN ---
+# --- PLANTILLA HTML DE LA MINI APP CON CAPTURA DE GPS ---
 MINI_APP_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -146,9 +152,32 @@ MINI_APP_HTML = """
         tg.expand();
         const userId = tg.initDataUnsafe?.user?.id || 123456;
 
+        let userLat = null;
+        let userLon = null;
         let currentCandidate = null;
         let activeChatUserId = null;
         let chatInterval = null;
+
+        // Capturar ubicación GPS real del dispositivo
+        function updateLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude;
+                        userLon = position.coords.longitude;
+                        sendPing();
+                        loadProfile();
+                    },
+                    (error) => {
+                        console.log("Acceso a GPS no otorgado o no disponible.");
+                        sendPing();
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                sendPing();
+            }
+        }
 
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -167,15 +196,19 @@ MINI_APP_HTML = """
             }
         }
 
+        // Ping de presencia con coordenadas GPS
         function sendPing() {
             fetch('/api/ping', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId })
+                body: JSON.stringify({ 
+                    user_id: userId,
+                    lat: userLat,
+                    lon: userLon
+                })
             });
         }
         setInterval(sendPing, 30000);
-        sendPing();
 
         async function loadProfile() {
             const minAge = document.getElementById('minAge').value;
@@ -188,7 +221,7 @@ MINI_APP_HTML = """
             if (data.candidate) {
                 currentCandidate = data.candidate;
                 const isOnline = currentCandidate.is_online;
-                const distText = currentCandidate.distancia !== null ? `📍 A ${currentCandidate.distancia} km` : '📍 Cerca de ti';
+                const distText = currentCandidate.distancia !== null ? `📍 A ${currentCandidate.distancia} km de ti` : '📍 Ubicación sin GPS';
 
                 container.innerHTML = `
                     <div class="card">
@@ -279,7 +312,8 @@ MINI_APP_HTML = """
             fetchMessages();
         }
 
-        loadProfile();
+        // Iniciar ubicación GPS al cargar
+        updateLocation();
     </script>
 </body>
 </html>
@@ -293,11 +327,17 @@ def home():
 def ping():
     data = request.json or {}
     user_id = data.get('user_id')
+    lat = data.get('lat')
+    lon = data.get('lon')
+
     if user_id:
         conn = sqlite3.connect("dating_bot.db")
         cursor = conn.cursor()
         now = datetime.utcnow().isoformat()
-        cursor.execute("UPDATE users SET last_seen = ? WHERE user_id = ?", (now, user_id))
+        if lat is not None and lon is not None:
+            cursor.execute("UPDATE users SET last_seen = ?, lat = ?, lon = ? WHERE user_id = ?", (now, lat, lon, user_id))
+        else:
+            cursor.execute("UPDATE users SET last_seen = ? WHERE user_id = ?", (now, user_id))
         conn.commit()
         conn.close()
     return jsonify({"status": "ok"})
@@ -444,54 +484,4 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
-            name TEXT,
-            age INTEGER,
-            gender TEXT,
-            photo_id TEXT,
-            lat REAL,
-            lon REAL,
-            last_seen TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS likes (
-            from_user INTEGER,
-            to_user INTEGER,
-            PRIMARY KEY (from_user, to_user)
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_user INTEGER,
-            to_user INTEGER,
-            text TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# --- LÓGICA BOT DE TELEGRAM ---
-NOMBRE, EDAD, GENERO, FOTO = range(4)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = sqlite3.connect("dating_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
-    conn.close()
-
-    if user:
-        await update.message.reply_text("¡Bienvenido! Abre la Mini App para interactuar con perfiles y chatear.")
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("¡Bienvenido! Vamos a crear tu perfil.\n\n¿Cuál es tu nombre?")
-        return NOMBRE
-
-async def get_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text("Genial. ¿Cuántos años tienes?")
-  
+            name
