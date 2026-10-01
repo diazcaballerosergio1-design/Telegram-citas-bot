@@ -491,4 +491,98 @@ def init_db():
         )
     ''')
     conn.commit()
-   
+    conn.close()
+
+init_db()
+
+# --- LÓGICA BOT DE TELEGRAM ---
+NOMBRE, EDAD, GENERO, FOTO = range(4)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    conn = sqlite3.connect("dating_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user:
+        await update.message.reply_text("¡Bienvenido! Abre la Mini App para interactuar con perfiles y chatear.")
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("¡Bienvenido! Vamos a crear tu perfil.\n\n¿Cuál es tu nombre?")
+        return NOMBRE
+
+async def get_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("Genial. ¿Cuántos años tienes?")
+    return EDAD
+
+async def get_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        age = int(update.message.text)
+        context.user_data['age'] = age
+        keyboard = [[InlineKeyboardButton("Hombre 👨", callback_data="Hombre"), InlineKeyboardButton("Mujer 👩", callback_data="Mujer")]]
+        await update.message.reply_text("¿Cuál es tu género?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return GENERO
+    except ValueError:
+        await update.message.reply_text("Ingresa un número válido.")
+        return EDAD
+
+async def get_genero(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['gender'] = query.data
+    await query.edit_message_text(text=f"Género: {query.data}.\nAhora envía tu foto de perfil.")
+    return FOTO
+
+async def get_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    photo_file = update.message.photo[-1].file_id
+    name = context.user_data['name']
+    age = context.user_data['age']
+    gender = context.user_data['gender']
+    now = datetime.utcnow().isoformat()
+
+    conn = sqlite3.connect("dating_bot.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO users (user_id, name, age, gender, photo_id, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, name, age, gender, photo_file, now)
+    )
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text("🎉 ¡Perfil completado! Abre la Mini App para ver personas cerca y chatear.")
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Registro cancelado.")
+    return ConversationHandler.END
+
+def main():
+    global telegram_app
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        print("Error: Falta BOT_TOKEN")
+        return
+
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    telegram_app = Application.builder().token(token).build()
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            NOMBRE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_nombre)],
+            EDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_edad)],
+            GENERO: [CallbackQueryHandler(get_genero)],
+            FOTO: [MessageHandler(filters.PHOTO, get_foto)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    telegram_app.add_handler(conv_handler)
+    telegram_app.run_polling()
+
+if __name__ == "__main__":
+    main()
