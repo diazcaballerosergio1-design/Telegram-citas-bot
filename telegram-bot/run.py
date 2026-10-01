@@ -1,21 +1,61 @@
 import os
 import sqlite3
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
-    ConversationHandler,
     ContextTypes,
+    ConversationHandler,
     filters,
 )
 
+# --- SERVIDOR WEB (FLASK) PARA LA MINI APP EN RAILWAY ---
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    # Interfaz básica HTML para la Mini App de Telegram
+    return """
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Mini App Citas</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { font-family: sans-serif; text-align: center; padding: 20px; background: #121212; color: white; }
+            .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin-top: 20px; border: 1px solid #333; }
+            h2 { color: #e91e63; }
+        </style>
+    </head>
+    <body>
+        <h2>🔥 Mini App de Citas 🔥</h2>
+        <div class="card">
+            <p>¡Bienvenido a la Mini App integrada!</p>
+            <p>Tu sesión está activa desde Telegram.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+def run_flask():
+    # Railway asigna un puerto mediante la variable de entorno PORT
+    port = int(os.environ.get("PORT", 5000))
+    web_app.run(host="0.0.0.0", port=port)
+
+# --- CONFIGURACIÓN DE ESTADOS ---
 NOMBRE, EDAD, GENERO, FOTO = range(4)
 
+# --- BASE DE DATOS SIMPLE (SQLite) ---
 def init_db():
     conn = sqlite3.connect("dating_bot.db")
     cursor = conn.cursor()
+    # Tabla de Usuarios
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -25,6 +65,7 @@ def init_db():
             photo_id TEXT
         )
     ''')
+    # Tabla de Likes
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS likes (
             from_user INTEGER,
@@ -37,11 +78,12 @@ def init_db():
 
 init_db()
 
+# --- FUNCIONES DE COMANDO Y REGISTRO ---
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_user or not update.message:
-        return ConversationHandler.END
-        
     user_id = update.effective_user.id
+    
+    # Comprobar si ya existe el usuario registrado
     conn = sqlite3.connect("dating_bot.db")
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
@@ -49,30 +91,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     if user:
-        await update.message.reply_text("¡Bienvenido de nuevo! Usa /descubrir para ver candidatos.")
+        await update.message.reply_text("¡Bienvenido de nuevo! Pulsa /descubrir para ver personas cerca.")
         return ConversationHandler.END
     else:
         await update.message.reply_text("¡Bienvenido al Bot de Citas! Vamos a crear tu perfil.\n\n¿Cuál es tu nombre?")
         return NOMBRE
 
 async def get_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return NOMBRE
     context.user_data['name'] = update.message.text
     await update.message.reply_text("Genial. ¿Cuántos años tienes?")
     return EDAD
 
 async def get_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return EDAD
     try:
         age = int(update.message.text)
         context.user_data['age'] = age
         keyboard = [
-            [
-                InlineKeyboardButton("Hombre 👨", callback_data="Hombre"),
-                InlineKeyboardButton("Mujer 👩", callback_data="Mujer")
-            ]
+            [InlineKeyboardButton("Hombre 👨", callback_data="Hombre"),
+             InlineKeyboardButton("Mujer 👩", callback_data="Mujer")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("¿Cuál es tu género?", reply_markup=reply_markup)
@@ -83,24 +119,20 @@ async def get_edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_genero(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if not query or not query.data:
-        return GENERO
     await query.answer()
     context.user_data['gender'] = query.data
-    await query.edit_message_text(text=f"Género seleccionado: {query.data}.\nAhora envía una foto para tu perfil.")
+    await query.edit_message_text(text=f"Género seleccionado: {query.data}.\nAhora, por favor, envía una foto de perfil.")
     return FOTO
 
 async def get_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.photo or not update.effective_user:
-        return FOTO
-        
     user_id = update.effective_user.id
-    photo_file = update.message.photo[-1].file_id
+    photo_file = update.message.photo[-1].file_id  # Obtiene la foto de mayor resolución
     
-    name = context.user_data.get('name', 'Usuario')
-    age = context.user_data.get('age', 18)
-    gender = context.user_data.get('gender', 'No especificado')
+    name = context.user_data['name']
+    age = context.user_data['age']
+    gender = context.user_data['gender']
 
+    # Guardar en base de datos
     conn = sqlite3.connect("dating_bot.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -111,23 +143,23 @@ async def get_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     await update.message.reply_text(
-        "¡Tu perfil ha sido registrado con éxito! 🎉\n\nUsa /descubrir para buscar personas."
+        "¡Tu perfil ha sido registrado con éxito! 🎉\n\nUsa el comando /descubrir para buscar personas."
     )
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message:
-        await update.message.reply_text("Registro cancelado.")
+    await update.message.reply_text("Registro cancelado.")
     return ConversationHandler.END
 
+# --- BÚSQUEDA Y MATCHES ---
+
 async def descubrir(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_user:
-        return
     current_user = update.effective_user.id
     
     conn = sqlite3.connect("dating_bot.db")
     cursor = conn.cursor()
     
+    # Busca usuarios a los que no les hayas dado Like aún
     cursor.execute('''
         SELECT user_id, name, age, gender, photo_id FROM users 
         WHERE user_id != ? AND user_id NOT IN (
@@ -140,7 +172,7 @@ async def descubrir(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if candidate:
         cand_id, name, age, gender, photo_id = candidate
-        caption = f"👤 {name}, {age} años\n🚻 {gender}"
+        caption = f"👤 **{name}**, {age} años\n🚻 {gender}"
         
         keyboard = [
             [
@@ -150,65 +182,71 @@ async def descubrir(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        if update.callback_query and update.callback_query.message:
+        if update.callback_query:
             await update.callback_query.message.reply_photo(
-                photo=photo_id, caption=caption, reply_markup=reply_markup
+                photo=photo_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown"
             )
-        elif update.message:
+        else:
             await update.message.reply_photo(
-                photo=photo_id, caption=caption, reply_markup=reply_markup
+                photo=photo_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown"
             )
     else:
-        msg = "No hay más perfiles disponibles en este momento."
-        if update.callback_query and update.callback_query.message:
+        msg = "No hay más perfiles disponibles en este momento. ¡Vuelve más tarde!"
+        if update.callback_query:
             await update.callback_query.message.reply_text(msg)
-        elif update.message:
+        else:
             await update.message.reply_text(msg)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if not query or not query.data or not update.effective_user:
-        return
-        
     await query.answer()
+    
     data = query.data
     from_user = update.effective_user.id
 
     if data.startswith("like_") or data.startswith("dislike_"):
-        action, to_user_str = data.split("_")
-        to_user = int(to_user_str)
+        action, to_user = data.split("_")
+        to_user = int(to_user)
         
+        # Guardar interacción de Like
         if action == "like":
             conn = sqlite3.connect("dating_bot.db")
             cursor = conn.cursor()
             cursor.execute("INSERT OR IGNORE INTO likes (from_user, to_user) VALUES (?, ?)", (from_user, to_user))
             conn.commit()
             
+            # Verificar si hay MATCH
             cursor.execute("SELECT * FROM likes WHERE from_user = ? AND to_user = ?", (to_user, from_user))
             match = cursor.fetchone()
             conn.close()
 
             if match:
-                if query.message:
-                    await query.message.reply_text("🔥 ¡ES UN MATCH! Ambos se gustaron.")
+                await query.message.reply_text("🔥 ¡ES UN MATCH! Ambos se gustaron. ¡Pueden empezar a hablar!")
+                # Notificar a la otra persona
                 try:
                     await context.bot.send_message(
                         chat_id=to_user, 
-                        text="🔥 ¡Tienes un nuevo MATCH! Entra al bot para conversar."
+                        text="🔥 ¡Tienes un nuevo MATCH! Revisa la aplicación para chatear."
                     )
                 except Exception:
                     pass
 
-        if query.message:
-            await query.message.delete()
+        # Eliminar la foto actual y mostrar el siguiente perfil
+        await query.message.delete()
         await descubrir(update, context)
+
+# --- EJECUCIÓN DEL BOT Y SERVIDOR WEB ---
 
 def main():
     token = os.environ.get("BOT_TOKEN")
     if not token:
-        print("Error: No se encontró la variable BOT_TOKEN en Secrets.")
+        print("Error: No se encontró la variable de entorno BOT_TOKEN.")
         return
 
+    # 1. Iniciar servidor web Flask en segundo plano
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    # 2. Iniciar Bot de Telegram
     app = Application.builder().token(token).build()
 
     conv_handler = ConversationHandler(
@@ -226,7 +264,7 @@ def main():
     app.add_handler(CommandHandler("descubrir", descubrir))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot activo en Replit...")
+    print("Servidor Web y Bot activos en Railway...")
     app.run_polling()
 
 if __name__ == "__main__":
