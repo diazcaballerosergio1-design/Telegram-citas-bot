@@ -2,7 +2,7 @@ import os
 import math
 import sqlite3
 import threading
-import asyncio
+import requests
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, render_template_string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -16,8 +16,20 @@ from telegram.ext import (
     filters,
 )
 
-# --- SERVIDOR WEB (FLASK) ---
+# --- CONFIGURACIÓN Y SERVIDOR WEB (FLASK) ---
 web_app = Flask(__name__)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+def send_telegram_notification(chat_id, text):
+    """Envía un mensaje de Telegram mediante la API HTTP limpia sin chocar con asyncio."""
+    if not BOT_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"Error al enviar notificación: {e}")
 
 def calcular_distancia(lat1, lon1, lat2, lon2):
     if None in (lat1, lon1, lat2, lon2):
@@ -28,9 +40,6 @@ def calcular_distancia(lat1, lon1, lat2, lon2):
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return round(R * c, 1)
-
-# Variable global para enviar notificaciones de Telegram desde Flask
-telegram_app = None
 
 # --- PLANTILLA HTML DE LA MINI APP CON CHAT Y NAVEGACIÓN ---
 MINI_APP_HTML = """
@@ -45,16 +54,13 @@ MINI_APP_HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; padding-bottom: 70px; }
         
-        /* Modos/Pantallas */
         .screen { display: none; padding: 15px; }
         .screen.active { display: block; }
 
-        /* Encabezado y Filtros */
         .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid #2a2a2a; }
         .filters { margin: 15px 0; background: #1e1e1e; padding: 12px; border-radius: 12px; display: flex; gap: 10px; align-items: center; font-size: 14px; }
         .filters input { width: 50px; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 4px; border-radius: 6px; text-align: center; }
 
-        /* Tarjeta de Descubrir */
         .card-container { margin-top: 10px; min-height: 400px; position: relative; }
         .card { background: #1e1e1e; border-radius: 16px; overflow: hidden; border: 1px solid #333; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
         .card-img { width: 100%; height: 310px; object-fit: cover; background: #2a2a2a; display: block; }
@@ -68,11 +74,9 @@ MINI_APP_HTML = """
         .btn-dislike { background: #2a2a2a; color: #ff4d4d; border: 2px solid #ff4d4d; }
         .btn-like { background: #e91e63; color: #fff; box-shadow: 0 4px 15px rgba(233,30,99,0.4); }
 
-        /* Lista de Chats */
         .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #1e1e1e; border-radius: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid #2a2a2a; }
         .chat-avatar { width: 50px; height: 50px; border-radius: 50%; background: #e91e63; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
 
-        /* Conversación Activa */
         .chat-box { height: 350px; overflow-y: auto; background: #181818; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; border: 1px solid #2a2a2a; }
         .msg { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
         .msg.me { align-self: flex-end; background: #e91e63; color: #fff; }
@@ -81,8 +85,7 @@ MINI_APP_HTML = """
         .send-form input { flex: 1; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 8px; }
         .send-form button { background: #e91e63; color: #fff; border: none; padding: 0 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
-        /* Menú Inferior de Navegación */
-        .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #1a1a1a; border-top: 1px solid #333; display: flex; justify-content: space-around; align-items: center; }
+        .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #1a1a1a; border-top: 1px solid #333; display: flex; justify-content: space-around; align-items: center; z-index: 100; }
         .nav-btn { background: none; border: none; color: #888; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
         .nav-btn.active { color: #e91e63; font-weight: bold; }
         .nav-btn span { font-size: 20px; }
@@ -92,7 +95,6 @@ MINI_APP_HTML = """
 </head>
 <body>
 
-    <!-- PANTALLA: DESCUBRIR -->
     <div id="screenDiscover" class="screen active">
         <div class="header">
             <h2>🔥 Descubrir</h2>
@@ -109,7 +111,6 @@ MINI_APP_HTML = """
         </div>
     </div>
 
-    <!-- PANTALLA: LISTA DE CHATS -->
     <div id="screenChats" class="screen">
         <div class="header">
             <h2>💬 Mis Matches</h2>
@@ -119,7 +120,6 @@ MINI_APP_HTML = """
         </div>
     </div>
 
-    <!-- PANTALLA: CONVERSACIÓN INDIVIDUAL -->
     <div id="screenConversation" class="screen">
         <div class="header">
             <button onclick="showScreen('screenChats')" style="background:none; border:none; color:#e91e63; font-size:16px; cursor:pointer;">← Volver</button>
@@ -132,7 +132,6 @@ MINI_APP_HTML = """
         </div>
     </div>
 
-    <!-- BARRA NAVEGACIÓN INFERIOR -->
     <div class="nav-bar">
         <button class="nav-btn active" id="navDiscover" onclick="showScreen('screenDiscover')">
             <span>🔥</span> Descubrir
@@ -168,7 +167,6 @@ MINI_APP_HTML = """
             }
         }
 
-        // Ping para estado En Línea
         function sendPing() {
             fetch('/api/ping', {
                 method: 'POST',
@@ -179,7 +177,6 @@ MINI_APP_HTML = """
         setInterval(sendPing, 30000);
         sendPing();
 
-        // --- MÓDULO DESCUBRIR ---
         async function loadProfile() {
             const minAge = document.getElementById('minAge').value;
             const maxAge = document.getElementById('maxAge').value;
@@ -227,7 +224,6 @@ MINI_APP_HTML = """
             loadProfile();
         }
 
-        // --- MÓDULO CHATS ---
         async function loadChats() {
             const res = await fetch(`/api/matches?user_id=${userId}`);
             const data = await res.json();
@@ -239,7 +235,7 @@ MINI_APP_HTML = """
                         <div class="chat-avatar">${m.name.charAt(0)}</div>
                         <div>
                             <strong>${m.name}</strong>
-                            <div style="font-size:12px; color:#aaa;">Presiona para chatear</div>
+                            <div style="font-size:12px; color:#aaa;">Presiona para abrir conversación</div>
                         </div>
                     </div>
                 `).join('');
@@ -253,7 +249,7 @@ MINI_APP_HTML = """
             document.getElementById('chatTitle').innerText = name;
             showScreen('screenConversation');
             fetchMessages();
-            chatInterval = setInterval(fetchMessages, 3000); // Actualiza cada 3 segundos
+            chatInterval = setInterval(fetchMessages, 3000);
         }
 
         async function fetchMessages() {
@@ -353,7 +349,6 @@ def get_profiles():
         })
     return jsonify({"candidate": None})
 
-# API: Registrar Like / Dislike + Notificación Telegram instantánea de Match
 @web_app.route('/api/like', methods=['POST'])
 def handle_like():
     data = request.json or {}
@@ -377,19 +372,13 @@ def handle_like():
 
     conn.close()
 
-    # Si hay match, enviar notificación instantánea por Telegram
-    if is_match and telegram_app:
-        try:
-            loop = asyncio.get_event_loop()
-            msg_text = "🔥 ¡TIENES UN NUEVO MATCH! Ambos se gustaron. Abre la Mini App para chatear."
-            loop.create_task(telegram_app.bot.send_message(chat_id=from_user, text=msg_text))
-            loop.create_task(telegram_app.bot.send_message(chat_id=to_user, text=msg_text))
-        except Exception as e:
-            print(f"Error enviando notificación de Telegram: {e}")
+    if is_match:
+        msg_text = "🔥 ¡TIENES UN NUEVO MATCH! Ambos se gustaron. Abre la Mini App para chatear."
+        send_telegram_notification(from_user, msg_text)
+        send_telegram_notification(to_user, msg_text)
 
     return jsonify({"success": True, "match": is_match})
 
-# API: Obtener lista de Matches
 @web_app.route('/api/matches', methods=['GET'])
 def get_matches():
     user_id = request.args.get('user_id', type=int)
@@ -409,7 +398,6 @@ def get_matches():
     conn.close()
     return jsonify({"matches": matches})
 
-# API: Obtener mensajes de un chat
 @web_app.route('/api/messages', methods=['GET'])
 def get_messages():
     user_id = request.args.get('user_id', type=int)
@@ -427,7 +415,6 @@ def get_messages():
     conn.close()
     return jsonify({"messages": messages})
 
-# API: Enviar mensaje de chat
 @web_app.route('/api/send_message', methods=['POST'])
 def send_message():
     data = request.json or {}
@@ -442,16 +429,7 @@ def send_message():
         conn.commit()
         conn.close()
 
-        # Notificación discreta vía Telegram si la otra persona no está dentro del chat
-        if telegram_app:
-            try:
-                loop = asyncio.get_event_loop()
-                loop.create_task(telegram_app.bot.send_message(
-                    chat_id=to_user, 
-                    text=f"💬 Tienes un nuevo mensaje en el chat. Abre la Mini App para responder."
-                ))
-            except Exception:
-                pass
+        send_telegram_notification(to_user, "💬 Tienes un nuevo mensaje en el chat. Abre la Mini App para responder.")
 
     return jsonify({"status": "ok"})
 
@@ -491,4 +469,29 @@ def init_db():
         )
     ''')
     conn.commit()
-   
+    conn.close()
+
+init_db()
+
+# --- LÓGICA BOT DE TELEGRAM ---
+NOMBRE, EDAD, GENERO, FOTO = range(4)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    conn = sqlite3.connect("dating_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user:
+        await update.message.reply_text("¡Bienvenido! Abre la Mini App para interactuar con perfiles y chatear.")
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("¡Bienvenido! Vamos a crear tu perfil.\n\n¿Cuál es tu nombre?")
+        return NOMBRE
+
+async def get_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("Genial. ¿Cuántos años tienes?")
+  
