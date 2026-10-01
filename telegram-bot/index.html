@@ -2,278 +2,252 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Citas Amigos - Mini App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citas & Amigos</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; user-select: none; }
-        body { background-color: #f5f7fb; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; overflow: hidden; touch-action: pan-y; }
-        header { width: 100%; padding: 15px; text-align: center; font-weight: bold; font-size: 1.2rem; background: #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); color: #222; }
-        .card-container { flex: 1; width: 90%; max-width: 380px; margin: 20px 0; display: flex; justify-content: center; align-items: center; position: relative; }
-        
-        .card { 
-            width: 100%; 
-            height: 100%; 
-            background: #fff; 
-            border-radius: 20px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
-            overflow: hidden; 
-            display: flex; 
-            flex-direction: column; 
-            position: absolute; 
-            cursor: grab;
-            will-change: transform;
-            transition: transform 0.1s ease, opacity 0.1s ease;
-        }
-        .card:active { cursor: grabbing; }
-        .card img { width: 100%; height: 72%; object-fit: cover; background-color: #eee; pointer-events: none; }
-        .card-info { padding: 15px; height: 28%; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
-        .card-info h2 { font-size: 1.4rem; color: #111; margin-bottom: 4px; }
-        .card-info p { font-size: 0.95rem; color: #666; }
-        
-        /* Indicadores visuales LIKE / NOPE */
-        .badge {
-            position: absolute;
-            top: 25px;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 1.8rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            opacity: 0;
-            transition: opacity 0.1s ease;
-            z-index: 10;
-        }
-        .badge-like {
-            left: 20px;
-            color: #2ed573;
-            border: 4px solid #2ed573;
-            transform: rotate(-15deg);
-        }
-        .badge-dislike {
-            right: 20px;
-            color: #ff4757;
-            border: 4px solid #ff4757;
-            transform: rotate(15deg);
-        }
-
-        .controls { width: 100%; max-width: 380px; padding-bottom: 25px; display: flex; justify-content: space-around; align-items: center; }
-        .btn { width: 65px; height: 65px; border-radius: 50%; border: none; font-size: 1.8rem; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.1s ease; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; padding-bottom: 70px; }
+        .screen { display: none; padding: 15px; }
+        .screen.active { display: block; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid #2a2a2a; }
+        .filters { margin: 15px 0; background: #1e1e1e; padding: 12px; border-radius: 12px; display: flex; gap: 10px; align-items: center; font-size: 14px; }
+        .filters input { width: 50px; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 4px; border-radius: 6px; text-align: center; }
+        .card-container { margin-top: 10px; min-height: 400px; position: relative; }
+        .card { background: #1e1e1e; border-radius: 16px; overflow: hidden; border: 1px solid #333; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+        .card-img { width: 100%; height: 310px; object-fit: cover; background: #2a2a2a; display: block; }
+        .card-info { padding: 15px; }
+        .status-badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 8px #4caf50; }
+        .offline-badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #888; }
+        .meta { font-size: 13px; color: #aaa; margin-top: 4px; }
+        .actions { display: flex; justify-content: space-around; margin-top: 15px; }
+        .btn { width: 65px; height: 65px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; transition: transform 0.2s; display: flex; align-items: center; justify-content: center; }
         .btn:active { transform: scale(0.9); }
-        .btn-dislike { background-color: #fff; color: #ff4757; border: 2px solid #ff4757; }
-        .btn-like { background-color: #ff4757; color: #fff; }
-        .no-candidates { text-align: center; color: #777; font-size: 1.1rem; padding: 20px; }
-        
-        /* Modal de Match */
-        .match-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; z-index: 1000; color: #fff; text-align: center; padding: 20px; }
-        .match-modal h1 { font-size: 2.5rem; color: #ff4757; margin-bottom: 10px; }
-        .match-modal p { font-size: 1.2rem; margin-bottom: 25px; }
-        .match-modal button { padding: 12px 30px; font-size: 1rem; border: none; background: #ff4757; color: white; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        .btn-dislike { background: #2a2a2a; color: #ff4d4d; border: 2px solid #ff4d4d; }
+        .btn-like { background: #e91e63; color: #fff; box-shadow: 0 4px 15px rgba(233,30,99,0.4); }
+        .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #1e1e1e; border-radius: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid #2a2a2a; }
+        .chat-avatar { width: 50px; height: 50px; border-radius: 50%; background: #e91e63; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+        .chat-box { height: 350px; overflow-y: auto; background: #181818; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; border: 1px solid #2a2a2a; }
+        .msg { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
+        .msg.me { align-self: flex-end; background: #e91e63; color: #fff; }
+        .msg.other { align-self: flex-start; background: #2a2a2a; color: #fff; }
+        .send-form { display: flex; gap: 8px; }
+        .send-form input { flex: 1; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 8px; }
+        .send-form button { background: #e91e63; color: #fff; border: none; padding: 0 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #1a1a1a; border-top: 1px solid #333; display: flex; justify-content: space-around; align-items: center; z-index: 100; }
+        .nav-btn { background: none; border: none; color: #888; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+        .nav-btn.active { color: #e91e63; font-weight: bold; }
+        .nav-btn span { font-size: 20px; }
+        .empty { text-align: center; padding: 50px 20px; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <header>✨ Descubrir Citas</header>
-
-    <div class="card-container" id="cardContainer">
-        <div style="text-align:center; color:#888;">Cargando candidato...</div>
+    <div id="screenDiscover" class="screen active">
+        <div class="header">
+            <h2>🔥 Descubrir</h2>
+        </div>
+        <div class="filters">
+            <span>Edad:</span>
+            <input type="number" id="minAge" value="18" min="18" max="99" onchange="loadProfile()">
+            <span>a</span>
+            <input type="number" id="maxAge" value="50" min="18" max="99" onchange="loadProfile()">
+            <span>años</span>
+        </div>
+        <div class="card-container" id="cardContainer">
+            <div class="empty">Cargando perfiles...</div>
+        </div>
     </div>
 
-    <div class="controls" id="controls" style="display: none;">
-        <button class="btn btn-dislike" onclick="triggerSwipe('dislike')">✕</button>
-        <button class="btn btn-like" onclick="triggerSwipe('like')">❤️</button>
+    <div id="screenChats" class="screen">
+        <div class="header">
+            <h2>💬 Mis Matches</h2>
+        </div>
+        <div id="chatsList" style="margin-top: 15px;">
+            <div class="empty">Cargando conversaciones...</div>
+        </div>
     </div>
 
-    <div class="match-modal" id="matchModal">
-        <h1>🔥 ¡ES UN MATCH! 🔥</h1>
-        <p id="matchText">¡A esta persona también le gustas!</p>
-        <button onclick="closeMatchModal()">Seguir buscando</button>
+    <div id="screenConversation" class="screen">
+        <div class="header">
+            <button onclick="showScreen('screenChats')" style="background:none; border:none; color:#e91e63; font-size:16px; cursor:pointer;">← Volver</button>
+            <h3 id="chatTitle">Chat</h3>
+        </div>
+        <div class="chat-box" id="chatMessages"></div>
+        <div class="send-form">
+            <input type="text" id="msgInput" placeholder="Escribe un mensaje...">
+            <button onclick="sendMessage()">Enviar</button>
+        </div>
+    </div>
+
+    <div class="nav-bar">
+        <button class="nav-btn active" id="navDiscover" onclick="showScreen('screenDiscover')">
+            <span>🔥</span> Descubrir
+        </button>
+        <button class="nav-btn" id="navChats" onclick="showScreen('screenChats')">
+            <span>💬</span> Chats
+        </button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        const userId = tg.initDataUnsafe?.user?.id || 123456;
 
+        let userLat = null;
+        let userLon = null;
         let currentCandidate = null;
-        let userId = 12345;
+        let activeChatUserId = null;
+        let chatInterval = null;
 
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            userId = tg.initDataUnsafe.user.id;
+        function updateLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude;
+                        userLon = position.coords.longitude;
+                        sendPing();
+                        loadProfile();
+                    },
+                    (error) => {
+                        sendPing();
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                sendPing();
+            }
         }
 
-        async function loadCandidate() {
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+            document.getElementById(screenId).classList.add('active');
+
+            if (screenId === 'screenDiscover') {
+                document.getElementById('navDiscover').classList.add('active');
+                clearInterval(chatInterval);
+                loadProfile();
+            } else if (screenId === 'screenChats') {
+                document.getElementById('navChats').classList.add('active');
+                clearInterval(chatInterval);
+                loadChats();
+            }
+        }
+
+        function sendPing() {
+            fetch('/api/ping', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, lat: userLat, lon: userLon })
+            });
+        }
+        setInterval(sendPing, 30000);
+
+        async function loadProfile() {
+            const minAge = document.getElementById('minAge').value;
+            const maxAge = document.getElementById('maxAge').value;
+
+            const res = await fetch(`/api/profiles?user_id=${userId}&min_age=${minAge}&max_age=${maxAge}`);
+            const data = await res.json();
+
             const container = document.getElementById('cardContainer');
-            const controls = document.getElementById('controls');
-            
-            try {
-                const res = await fetch(`/api/candidate?user_id=${userId}`);
-                const data = await res.json();
-                
-                if (data.candidate) {
-                    currentCandidate = data.candidate;
-                    container.innerHTML = `
-                        <div class="card" id="activeCard">
-                            <div class="badge badge-like" id="badgeLike">LIKE</div>
-                            <div class="badge badge-dislike" id="badgeDislike">NOPE</div>
-                            <img src="${data.candidate.photo_url || 'https://via.placeholder.com/300x400'}" alt="Foto">
-                            <div class="card-info">
-                                <h2>${data.candidate.name}, ${data.candidate.age}</h2>
-                                <p>👤 ${data.candidate.gender}</p>
-                            </div>
+            if (data.candidate) {
+                currentCandidate = data.candidate;
+                const isOnline = currentCandidate.is_online;
+                const distText = currentCandidate.distancia !== null ? `📍 A ${currentCandidate.distancia} km de ti` : '📍 Ubicación sin GPS';
+
+                container.innerHTML = `
+                    <div class="card">
+                        <img src="${currentCandidate.photo_url}" class="card-img">
+                        <div class="card-info">
+                            <h3>${currentCandidate.name}, ${currentCandidate.age} <span class="${isOnline ? 'status-badge' : 'offline-badge'}"></span></h3>
+                            <div class="meta">${isOnline ? '🟢 En línea ahora' : '⚪ Reciente'} | ${distText}</div>
                         </div>
-                    `;
-                    controls.style.display = 'flex';
-                    initSwipeEvents();
-                } else {
-                    currentCandidate = null;
-                    container.innerHTML = `<div class="no-candidates">🎉 ¡Has visto a todas las personas disponibles por ahora!</div>`;
-                    controls.style.display = 'none';
-                }
-            } catch (err) {
-                container.innerHTML = `<div class="no-candidates">Error al cargar datos.</div>`;
-            }
-        }
-
-        // SWIPE LOGIC
-        let startX = 0, startY = 0, currentX = 0, currentY = 0;
-        let isDragging = false;
-
-        function initSwipeEvents() {
-            const card = document.getElementById('activeCard');
-            if (!card) return;
-
-            // Touch events
-            card.addEventListener('touchstart', handleStart);
-            card.addEventListener('touchmove', handleMove);
-            card.addEventListener('touchend', handleEnd);
-
-            // Mouse events
-            card.addEventListener('mousedown', handleStart);
-            window.addEventListener('mousemove', handleMove);
-            window.addEventListener('mouseup', handleEnd);
-        }
-
-        function handleStart(e) {
-            isDragging = true;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            startX = clientX;
-            startY = clientY;
-            const card = document.getElementById('activeCard');
-            if (card) card.style.transition = 'none';
-        }
-
-        function handleMove(e) {
-            if (!isDragging) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            currentX = clientX - startX;
-            currentY = clientY - startY;
-
-            const card = document.getElementById('activeCard');
-            const badgeLike = document.getElementById('badgeLike');
-            const badgeDislike = document.getElementById('badgeDislike');
-
-            if (!card) return;
-
-            const rotate = currentX * 0.08;
-            card.style.transform = `translate3d(${currentX}px, ${currentY}px, 0) rotate(${rotate}deg)`;
-
-            // Opacidad de indicadores
-            if (currentX > 30) {
-                badgeLike.style.opacity = Math.min(currentX / 100, 1);
-                badgeDislike.style.opacity = 0;
-            } else if (currentX < -30) {
-                badgeDislike.style.opacity = Math.min(Math.abs(currentX) / 100, 1);
-                badgeLike.style.opacity = 0;
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-dislike" onclick="handleAction('dislike')">❌</button>
+                        <button class="btn btn-like" onclick="handleAction('like')">❤️</button>
+                    </div>
+                `;
             } else {
-                badgeLike.style.opacity = 0;
-                badgeDislike.style.opacity = 0;
+                container.innerHTML = `<div class="empty">🎉 ¡Has visto todos los perfiles disponibles!</div>`;
             }
         }
 
-        function handleEnd() {
-            if (!isDragging) return;
-            isDragging = false;
-            
-            const threshold = 100;
-            if (currentX > threshold) {
-                completeSwipe('like');
-            } else if (currentX < -threshold) {
-                completeSwipe('dislike');
-            } else {
-                resetCard();
-            }
-            startX = 0; startY = 0; currentX = 0; currentY = 0;
-        }
-
-        function resetCard() {
-            const card = document.getElementById('activeCard');
-            const badgeLike = document.getElementById('badgeLike');
-            const badgeDislike = document.getElementById('badgeDislike');
-            if (!card) return;
-            card.style.transition = 'transform 0.3s ease';
-            card.style.transform = 'translate3d(0, 0, 0) rotate(0deg)';
-            if (badgeLike) badgeLike.style.opacity = 0;
-            if (badgeDislike) badgeDislike.style.opacity = 0;
-        }
-
-        function triggerSwipe(action) {
-            completeSwipe(action);
-        }
-
-        function completeSwipe(action) {
-            const card = document.getElementById('activeCard');
-            if (!card) return;
-
-            card.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
-            const flyX = action === 'like' ? 500 : -500;
-            card.style.transform = `translate3d(${flyX}px, ${currentY}px, 0) rotate(${flyX * 0.05}deg)`;
-            card.style.opacity = '0';
-
-            setTimeout(() => {
-                sendAction(action);
-            }, 300);
-        }
-
-        async function sendAction(action) {
+        async function handleAction(action) {
             if (!currentCandidate) return;
 
-            const targetId = currentCandidate.id;
-            try {
-                const res = await fetch('/api/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        from_user: userId,
-                        target_id: targetId,
-                        action: action
-                    })
-                });
+            const res = await fetch('/api/like', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from_user: userId, to_user: currentCandidate.user_id, action: action })
+            });
 
-                const data = await res.json();
-                if (data.match) {
-                    showMatchModal(currentCandidate.name);
-                } else {
-                    loadCandidate();
-                }
-            } catch (e) {
-                console.error(e);
-                loadCandidate();
+            const result = await res.json();
+            if (result.match) {
+                tg.showAlert("🔥 ¡ES UN MATCH! Ambos se han gustado.");
+            }
+            loadProfile();
+        }
+
+        async function loadChats() {
+            const res = await fetch(`/api/matches?user_id=${userId}`);
+            const data = await res.json();
+            const list = document.getElementById('chatsList');
+
+            if (data.matches && data.matches.length > 0) {
+                list.innerHTML = data.matches.map(m => `
+                    <div class="chat-item" onclick="openChat(${m.user_id}, '${m.name}')">
+                        <div class="chat-avatar">${m.name.charAt(0)}</div>
+                        <div>
+                            <strong>${m.name}</strong>
+                            <div style="font-size:12px; color:#aaa;">Presiona para abrir conversación</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                list.innerHTML = `<div class="empty">Aún no tienes matches. ¡Da Like en Descubrir!</div>`;
             }
         }
 
-        function showMatchModal(name) {
-            document.getElementById('matchText').innerText = `¡A ${name} también le gustas! Les hemos enviado un mensaje por Telegram.`;
-            document.getElementById('matchModal').style.display = 'flex';
+        function openChat(otherUserId, name) {
+            activeChatUserId = otherUserId;
+            document.getElementById('chatTitle').innerText = name;
+            showScreen('screenConversation');
+            fetchMessages();
+            chatInterval = setInterval(fetchMessages, 3000);
         }
 
-        function closeMatchModal() {
-            document.getElementById('matchModal').style.display = 'none';
-            loadCandidate();
+        async function fetchMessages() {
+            if (!activeChatUserId) return;
+            const res = await fetch(`/api/messages?user_id=${userId}&other_id=${activeChatUserId}`);
+            const data = await res.json();
+            const box = document.getElementById('chatMessages');
+
+            box.innerHTML = data.messages.map(m => `
+                <div class="msg ${m.from_user === userId ? 'me' : 'other'}">${m.text}</div>
+            `).join('');
+            box.scrollTop = box.scrollHeight;
         }
 
-        loadCandidate();
+        async function sendMessage() {
+            const input = document.getElementById('msgInput');
+            const text = input.value.trim();
+            if (!text || !activeChatUserId) return;
+
+            input.value = '';
+            await fetch('/api/send_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from_user: userId, to_user: activeChatUserId, text: text })
+            });
+
+            fetchMessages();
+        }
+
+        updateLocation();
     </script>
 </body>
 </html>
