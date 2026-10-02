@@ -31,7 +31,7 @@
         color-scheme: light !important;
       }
 
-      .screen { display: none; padding: 15px; background-color: #ffffff !important; }
+      .screen { display: none; padding: 15px; padding-bottom: 80px; background-color: #ffffff !important; min-height: 100vh; }
       .screen.active { display: block; }
 
       .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
@@ -39,36 +39,35 @@
       .filters { margin: 15px 0; background: var(--bg-secondary); padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); color: var(--text-main); }
       .filters input { width: 50px; background: #ffffff; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; padding: 4px; text-align: center; }
 
-      .card-container { margin-top: 10px; min-height: 400px; position: relative; }
-      .card { background: var(--bg-secondary); border-radius: 16px; overflow: hidden; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-      .card-img { width: 100%; height: 310px; object-fit: cover; background: #e2e8f0; }
-      .card-info { padding: 15px; color: var(--text-main); }
+      .card-container { margin-top: 10px; position: relative; }
+      .card { background: var(--bg-secondary); border-radius: 16px; overflow: hidden; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 15px; }
+      .card-img { width: 100%; height: 280px; object-fit: cover; background: #e2e8f0; border-radius: 12px; }
+      .card-info { margin-top: 15px; color: var(--text-main); }
 
-      .status-badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
-      .offline-badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ccc; }
-      .meta { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+      /* Botón de videollamada / en vivo condicional en el perfil individual */
+      .video-call-btn {
+        display: none;
+        width: 100%;
+        background: #10b981;
+        color: white;
+        border: none;
+        padding: 12px;
+        border-radius: 10px;
+        font-weight: bold;
+        margin-top: 12px;
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 15px;
+      }
+      .video-call-btn.visible { display: flex; }
 
-      .actions { display: flex; justify-content: space-around; margin-top: 15px; }
-      .btn { width: 65px; height: 65px; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
-      .btn:active { transform: scale(0.9); }
-      
-      .btn-dislike { background: #ffffff; color: #ef4444; border: 2px solid #fee2e2; }
-      .btn-like { background: var(--accent-color); color: #fff; }
-
-      .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-color); }
+      .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
       .chat-avatar { width: 50px; height: 50px; border-radius: 50%; background: #cbd5e1; }
-      
-      .chat-box { height: 350px; overflow-y: auto; background: var(--bg-secondary); border-radius: 12px; padding: 10px; border: 1px solid var(--border-color); }
-      .msg { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 14px; margin-bottom: 8px; }
-      .msg.me { align-self: flex-end; background: var(--accent-color); color: #fff; }
-      .msg.other { align-self: flex-start; background: #ffffff; color: var(--text-main); border: 1px solid var(--border-color); }
-
-      .send-form { display: flex; gap: 8px; margin-top: 10px; }
-      .send-form input { flex: 1; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; color: var(--text-main); }
-      .send-form button { background: var(--accent-color); color: #fff; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
       .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: var(--bg-primary); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid var(--border-color); z-index: 100; }
-      .nav-btn { background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .nav-btn { background: none; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
       .nav-btn.active { color: var(--accent-color); font-weight: bold; }
       .nav-btn span { font-size: 20px; }
 
@@ -78,30 +77,119 @@
 </head>
 <body>
 
-    <div id="screenDiscover" class="screen active">
-        <div class="header">
-            <h2>🔥 Descubrir</h2>
+    <!-- 1. Pantalla Descubrir -->
+    <div id="screen-descubrir" class="screen active">
+        <div class="header"><h2>🔥 Descubrir</h2></div>
+        <div class="filters">Edad: <input type="text" value="18" readonly> a <input type="text" value="50" readonly> años</div>
+        <div class="empty">🎉 ¡Has visto todos los perfiles disponibles!</div>
+    </div>
+
+    <!-- 2. Pantalla Cerca -->
+    <div id="screen-cerca" class="screen">
+        <div class="header"><h2>📍 Cerca de ti</h2></div>
+        <div class="empty">🔍 No hay usuarios cerca en este momento.</div>
+    </div>
+
+    <!-- 3. Pantalla Actividad -->
+    <div id="screen-actividad" class="screen">
+        <div class="header"><h2>❤️ Actividad</h2></div>
+        <div class="empty">✨ Aquí verás quién te ha dado like o visitado.</div>
+    </div>
+
+    <!-- 4. Pantalla Chats -->
+    <div id="screen-chats" class="screen">
+        <div class="header"><h2>💬 Chats</h2></div>
+        <div class="chat-item" onclick="openProfile('Carlos', true)">
+            <div class="chat-avatar"></div>
+            <div>
+                <h4>Carlos</h4>
+                <p style="font-size: 13px; color: var(--text-muted);">¡Hola! ¿Cómo estás?</p>
+            </div>
         </div>
-        <div class="filters">
-            Edad: <input type="text" value="18" readonly> a <input type="text" value="50" readonly> años
-        </div>
-        <div class="card-container">
-            <div class="empty">
-                🎉 ¡Has visto todos los perfiles disponibles!
+        <div class="chat-item" onclick="openProfile('Ana', false)">
+            <div class="chat-avatar"></div>
+            <div>
+                <h4>Ana</h4>
+                <p style="font-size: 13px; color: var(--text-muted);">Nuevo match guardado</p>
             </div>
         </div>
     </div>
 
+    <!-- 5. Pantalla Perfil Individual (Con opción de videollamada / en vivo condicional) -->
+    <div id="screen-perfil-detalle" class="screen">
+        <div class="header">
+            <button onclick="switchScreen('chats')" style="background:none; border:none; font-size:16px; color:var(--accent-color); cursor:pointer;">← Volver</button>
+            <h2 id="profile-name">Perfil</h2>
+            <div></div>
+        </div>
+        <div class="card">
+            <div class="card-img"></div>
+            <div class="card-info">
+                <h3 id="profile-title">Usuario</h3>
+                <p style="color: var(--text-muted); margin-top: 5px;">Buscando conectar y conocer gente nueva.</p>
+                
+                <!-- Botón de Videollamada / En vivo condicional -->
+                <button id="videoCallBtn" class="video-call-btn" onclick="startVideoCall()">
+                    🎥 Iniciar Videollamada / En vivo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Pantalla Perfil Propietario -->
+    <div id="screen-perfil" class="screen">
+        <div class="header"><h2>👤 Mi Perfil</h2></div>
+        <div class="empty">⚙️ Configura tus datos personales y fotos.</div>
+    </div>
+
+    <!-- Barra de Navegación Inferior (5 secciones principales) -->
     <div class="nav-bar">
-        <button class="nav-btn active">
-            <span>🔥</span>
-            Descubrir
+        <button class="nav-btn active" onclick="switchScreen('descubrir', this)">
+            <span>🔥</span>Descubrir
         </button>
-        <button class="nav-btn">
-            <span>💬</span>
-            Chats
+        <button class="nav-btn" onclick="switchScreen('cerca', this)">
+            <span>📍</span>Cerca
+        </button>
+        <button class="nav-btn" onclick="switchScreen('actividad', this)">
+            <span>❤️</span>Actividad
+        </button>
+        <button class="nav-btn" onclick="switchScreen('chats', this)">
+            <span>💬</span>Chats
+        </button>
+        <button class="nav-btn" onclick="switchScreen('perfil', this)">
+            <span>👤</span>Perfil
         </button>
     </div>
 
+    <script>
+        function switchScreen(screenId, btnElement) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-' + screenId).classList.add('active');
+
+            if(btnElement) {
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                btnElement.classList.add('active');
+            }
+        }
+
+        // Abre el perfil individual y evalúa si ya hubo chat previo
+        function openProfile(name, hasHadChat) {
+            document.getElementById('profile-name').innerText = name;
+            document.getElementById('profile-title').innerText = name + ", 24";
+            
+            const videoBtn = document.getElementById('videoCallBtn');
+            if (hasHadChat) {
+                videoBtn.classList.add('visible'); // Muestra la cámara 🎥 porque ya hablaron
+            } else {
+                videoBtn.classList.remove('visible'); // Oculta la cámara si no hay chat previo
+            }
+
+            switchScreen('perfil-detalle');
+        }
+
+        function startVideoCall() {
+            alert("Conectando videollamada / en vivo...");
+        }
+    </script>
 </body>
 </html>
