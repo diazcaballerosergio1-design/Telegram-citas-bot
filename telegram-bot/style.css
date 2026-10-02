@@ -1,0 +1,47 @@
+/* --- Nuevo Tema: Blanco y Azul-Lila --- */
+
+:root {
+  --bg-primary: #ffffff;          /* Fondo principal blanco */
+  --bg-secondary: #f4f5f9;        /* Fondo secundario / contenedores sutiles */
+  --text-main: #2b2d42;           /* Texto principal oscuro y nítido */
+  --text-muted: #8d99ae;          /* Texto secundario gris */
+  --accent-color: #6366f1;        /* Azul-lila moderno para botones y destacados */
+  --accent-hover: #4f46e5;        /* Tono lila más oscuro para hover */
+  --border-color: #e2e8f0;        /* Bordes suaves */
+}
+
+/* Aplicación general de colores */
+body, html {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-main) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Contenedores, tarjetas y campos de filtros */
+.card, .container, .filter-box, input, select {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Textos y títulos */
+h1, h2, h3, h4, h5, h6, span, p {
+  color: var(--text-main);
+}
+
+/* Botones principales y elementos activos con acento azul-lila */
+.btn-primary, .active-tab, .icon-active {
+  background-color: var(--accent-color) !important;
+  color: #ffffff !important;
+}
+
+/* Enlaces y acentos */
+a, .text-accent {
+  color: var(--accent-color) !important;
+}
+
+/* Barra de navegación inferior */
+nav, .navbar, .bottom-nav {
+  background-color: var(--bg-primary) !important;
+  border-top: 1px solid var(--border-color);
+}
