@@ -74,6 +74,16 @@
       .empty { text-align: center; padding: 50px 20px; color: var(--text-muted); }
       h1, h2, h3, h4, h5, h6, p, span { color: var(--text-main); }
     </style>
+    <script>
+    window.addEventListener('DOMContentLoaded', (event) => {
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.expand();
+            tg.setHeaderColor('#ffffff');
+            tg.setBackgroundColor('#ffffff');
+        }
+    });
+    </script>
 </head>
 <body>
 
