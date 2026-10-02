@@ -5,8 +5,9 @@ import sqlite3
 import threading
 from flask import Flask, render_template_string, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextType
 
+print("--- VERIFICANDO SI ESTOY CORRIENDO LA NUEVA VERSION 1.9 ---")
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
