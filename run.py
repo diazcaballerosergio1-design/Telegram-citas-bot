@@ -65,7 +65,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 app = Flask(__name__)
 
-# NUEVO: Evita que el navegador guarde la caché de las páginas HTML
+# Evita que el navegador guarde la caché de las páginas HTML
 @app.after_request
 def add_header(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
@@ -95,11 +95,35 @@ def ping():
         conn.close()
     return jsonify({"status": "ok"})
 
+# NUEVO: Ruta para consultar los datos del usuario actual (Mi Perfil)
+@app.route('/api/user', methods=['GET'])
+def get_user():
+    user_id = request.args.get('user_id', type=int)
+    if not user_id:
+        return jsonify({"user": None})
+    
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('SELECT user_id, name, age, photo_url FROM users WHERE user_id = ?', (user_id,))
+    row = c.fetchone()
+    conn.close()
+    
+    if row:
+        return jsonify({
+            "user": {
+                "user_id": row[0],
+                "name": row[1],
+                "age": row[2] or 25,
+                "photo_url": row[3] or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500"
+            }
+        })
+    return jsonify({"user": None})
+
 @app.route('/api/profiles', methods=['GET'])
 def get_profiles():
     user_id = request.args.get('user_id', type=int)
     min_age = request.args.get('min_age', default=18, type=int)
-    max_age = request.args.get('max_age', default=99, type=int)
+    max_age = request.args.get('max_age', default=150, type=int) # Soporte para edades indefinidas/altas
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -218,8 +242,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     base_url = os.environ.get("WEBAPP_URL", "https://telegram-citas-bot-production.up.railway.app")
-    
-    # NUEVO: Parámetro dinámico basado en el tiempo actual para forzar recarga en cada apertura
     timestamp_version = int(time.time())
     web_app_url = f"{base_url}?v={timestamp_version}"
 
