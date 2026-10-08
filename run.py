@@ -3,6 +3,7 @@ import logging
 import math
 import sqlite3
 import threading
+import time
 from flask import Flask, render_template, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -62,8 +63,15 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return round(R * c, 1)
 
-# Flask buscará automáticamente el archivo index.html dentro de una carpeta llamada 'templates'
 app = Flask(__name__)
+
+# NUEVO: Evita que el navegador guarde la caché de las páginas HTML
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
 
 @app.route('/')
 def home():
@@ -209,7 +217,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
 
-    web_app_url = os.environ.get("WEBAPP_URL", "https://telegram-citas-bot-production.up.railway.app")
+    base_url = os.environ.get("WEBAPP_URL", "https://telegram-citas-bot-production.up.railway.app")
+    
+    # NUEVO: Parámetro dinámico basado en el tiempo actual para forzar recarga en cada apertura
+    timestamp_version = int(time.time())
+    web_app_url = f"{base_url}?v={timestamp_version}"
+
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔥 Abrir Citas", web_app_url=WebAppInfo(url=web_app_url))]
     ])
