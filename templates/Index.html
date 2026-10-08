@@ -41,7 +41,7 @@
       .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
       
       .filters { margin: 15px 0; background: var(--bg-secondary); padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); color: var(--text-main); }
-      .filters input { width: 50px; background: #ffffff; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; padding: 4px; text-align: center; }
+      .filters input { width: 65px; background: #ffffff; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; padding: 4px; text-align: center; }
 
       .card-container { margin-top: 10px; position: relative; }
       .card { background: var(--bg-secondary); border-radius: 16px; overflow: hidden; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 15px; }
@@ -84,7 +84,7 @@
     <!-- 1. Pantalla Descubrir -->
     <div id="screen-descubrir" class="screen active">
         <div class="header"><h2>🔥 Descubrir</h2></div>
-        <div class="filters">Edad: <input type="text" value="18" readonly> a <input type="text" value="50" readonly> años</div>
+        <div class="filters">Edad: <input type="text" value="18" readonly> a <input type="text" value="Indef." readonly style="width: 75px;"></div>
         <div class="empty">🎉 ¡Has visto todos los perfiles disponibles!</div>
     </div>
 
@@ -146,7 +146,7 @@
         <div class="empty">⚙️ Configura tus datos personales y fotos.</div>
     </div>
 
-    <!-- Barra de Navegación Inferior (Botones principales solicitados) -->
+    <!-- Barra de Navegación Inferior -->
     <div class="nav-bar">
         <button class="nav-btn active" onclick="switchScreen('descubrir', this)">
             <span>🔥</span>Descubrir
@@ -176,16 +176,15 @@
             }
         }
 
-        // Abre el perfil individual y evalúa si ya hubo chat previo
         function openProfile(name, hasHadChat) {
             document.getElementById('profile-name').innerText = name;
             document.getElementById('profile-title').innerText = name + ", 24";
             
             const videoBtn = document.getElementById('videoCallBtn');
             if (hasHadChat) {
-                videoBtn.classList.add('visible'); // Muestra la cámara 🎥 porque ya hablaron
+                videoBtn.classList.add('visible');
             } else {
-                videoBtn.classList.remove('visible'); // Oculta la cámara si no hay chat previo
+                videoBtn.classList.remove('visible');
             }
 
             switchScreen('perfil-detalle');
@@ -196,4 +195,4 @@
         }
     </script>
 </body>
-  </html>
+</html>
